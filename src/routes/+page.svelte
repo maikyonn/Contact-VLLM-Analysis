@@ -1,0 +1,314 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { supabase } from '$lib/supabase';
+  import { processVisionResults, shuffleArray, generateUserId, type EvaluationPair } from '$lib/dataProcessor';
+  
+  let allPairs: EvaluationPair[] = [];
+  let unevaluatedPairs: EvaluationPair[] = [];
+  let currentPair: EvaluationPair | null = null;
+  let currentScore = 5;
+  let userId = '';
+  let loading = true;
+  let submitting = false;
+  let globalProgress = { total: 0, completed: 0 };
+  
+  $: progress = globalProgress.total > 0 ? (globalProgress.completed / globalProgress.total) * 100 : 0;
+  $: isComplete = !currentPair;
+
+  onMount(async () => {
+    userId = generateUserId();
+    await loadVisionData();
+    await loadGlobalProgress();
+    await getNextUnevaluatedPair();
+  });
+
+  async function loadVisionData() {
+    try {
+      const response = await fetch('/vision_llm_results.json');
+      const data = await response.json();
+      allPairs = processVisionResults(data);
+    } catch (error) {
+      console.error('Error loading vision data:', error);
+    }
+  }
+
+  async function loadGlobalProgress() {
+    try {
+      // Get all completed evaluations
+      const { data: completedEvals, error } = await supabase
+        .from('evaluations')
+        .select('image_id, model_name');
+      
+      if (error) throw error;
+      
+      // Create set of completed pairs
+      const completedPairs = new Set(
+        completedEvals?.map(evaluation => `${evaluation.image_id}_${evaluation.model_name}`) || []
+      );
+      
+      // Filter out completed pairs
+      unevaluatedPairs = allPairs.filter(pair => 
+        !completedPairs.has(`${pair.imageId}_${pair.modelName}`)
+      );
+      
+      globalProgress = {
+        total: allPairs.length,
+        completed: completedEvals?.length || 0
+      };
+      
+      loading = false;
+    } catch (error) {
+      console.error('Error loading global progress:', error);
+      loading = false;
+    }
+  }
+
+  async function getNextUnevaluatedPair() {
+    if (unevaluatedPairs.length > 0) {
+      // Get a random unevaluated pair
+      const randomIndex = Math.floor(Math.random() * unevaluatedPairs.length);
+      currentPair = unevaluatedPairs[randomIndex];
+    } else {
+      currentPair = null;
+    }
+  }
+
+  async function submitEvaluation() {
+    if (!currentPair || submitting) return;
+    
+    submitting = true;
+    
+    try {
+      // Check if this pair was already evaluated by someone else
+      const { data: existingEval, error: checkError } = await supabase
+        .from('evaluations')
+        .select('id')
+        .eq('image_id', currentPair.imageId)
+        .eq('model_name', currentPair.modelName)
+        .limit(1);
+      
+      if (checkError) throw checkError;
+      
+      if (existingEval && existingEval.length > 0) {
+        // Already evaluated, skip to next
+        await loadNextPair();
+        return;
+      }
+      
+      // Submit the evaluation
+      const { error } = await supabase
+        .from('evaluations')
+        .insert({
+          image_id: currentPair.imageId,
+          model_name: currentPair.modelName,
+          user_id: userId,
+          score: currentScore,
+          image_url: currentPair.imageUrl,
+          original_contacts: currentPair.originalContacts,
+          model_contacts: currentPair.modelContacts,
+          model_raw_response: currentPair.modelRawResponse
+        });
+      
+      if (error) {
+        // Handle race condition - someone else submitted at the same time
+        if (error.message?.includes('duplicate') || error.code === '23505') {
+          await loadNextPair();
+          return;
+        }
+        throw error;
+      }
+      
+      // Update global progress
+      globalProgress.completed += 1;
+      
+      // Remove this pair from unevaluated list
+      unevaluatedPairs = unevaluatedPairs.filter(pair => 
+        !(pair.imageId === currentPair!.imageId && pair.modelName === currentPair!.modelName)
+      );
+      
+      await loadNextPair();
+    } catch (error) {
+      console.error('Error submitting evaluation:', error);
+      alert('Error submitting evaluation. Please try again.');
+    } finally {
+      submitting = false;
+    }
+  }
+
+  async function loadNextPair() {
+    currentScore = 5; // Reset to default score
+    await getNextUnevaluatedPair();
+  }
+
+  async function refreshProgress() {
+    await loadGlobalProgress();
+    if (!currentPair) {
+      await getNextUnevaluatedPair();
+    }
+  }
+</script>
+
+<svelte:head>
+  <title>Semantic Evaluation Tool</title>
+</svelte:head>
+
+<div class="container mx-auto px-4 py-8">
+  <header class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-4">Semantic Description Evaluation</h1>
+    <p class="text-gray-600 max-w-2xl mx-auto">
+      Rate how well each description captures the human interactions shown in the image. 
+      Rate from 1 (very poor) to 10 (excellent) based on accuracy and completeness.
+    </p>
+  </header>
+
+  {#if loading}
+    <div class="flex justify-center items-center h-64">
+      <div class="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+    </div>
+  {:else if isComplete}
+    <div class="max-w-2xl mx-auto text-center">
+      <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+        <h2 class="text-2xl font-bold mb-2">🎉 All Evaluations Complete!</h2>
+        <p>Amazing! The community has completed all {globalProgress.total} evaluations.</p>
+        <p class="mt-2">Thank you for contributing to improving vision model performance!</p>
+        <button
+          on:click={refreshProgress}
+          class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          🔄 Check for New Evaluations
+        </button>
+      </div>
+    </div>
+  {:else if currentPair}
+    <!-- Progress Bar -->
+    <div class="max-w-4xl mx-auto mb-8">
+      <div class="flex justify-between text-sm text-gray-600 mb-2">
+        <span>Global Progress: {globalProgress.completed} of {globalProgress.total} evaluations</span>
+        <span>{Math.round(progress)}% Complete</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {progress}%"></div>
+      </div>
+      <div class="text-center text-xs text-gray-500 mt-2">
+        {unevaluatedPairs.length} remaining evaluations
+      </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto">
+      <div class="grid lg:grid-cols-2 gap-8">
+        <!-- Image Section (Left) -->
+        <div class="bg-white rounded-lg shadow-md p-9">
+          <div class="text-center">
+            <img 
+              src={currentPair.imageUrl} 
+              alt="Evaluation image"
+              class="w-full max-w-2xl mx-auto rounded-lg shadow-sm"
+              loading="lazy"
+            />
+          </div>
+        </div>
+
+        <!-- Evaluation Section (Right) -->
+        <div class="bg-white rounded-lg shadow-md p-9 flex flex-col">
+          <!-- Description Section -->
+          <div class="mb-12 flex-1">
+            <h3 class="text-xl font-semibold text-gray-800 mb-6">Description of Human Interactions:</h3>
+            <div class="bg-gray-50 p-9 rounded-lg">
+              {#if currentPair.modelContacts && currentPair.modelContacts.length > 0}
+                <ul class="space-y-3 text-gray-700 text-base">
+                  {#each currentPair.modelContacts as contact}
+                    <li class="flex items-start">
+                      <span class="text-blue-500 mr-4 mt-1 text-lg">•</span>
+                      <span class="leading-relaxed">{contact}</span>
+                    </li>
+                  {/each}
+                </ul>
+              {:else}
+                <p class="text-gray-500 italic text-center text-base">No human interactions detected</p>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Rating Section -->
+          <div class="mb-8">
+            <label for="score" class="block text-lg font-medium text-gray-700 mb-4">
+              Rate the accuracy and completeness:
+            </label>
+            <div class="flex items-center space-x-4 mb-4">
+              <span class="text-sm text-gray-500 font-medium text-center">1<br><span class="text-xs">Very Poor</span></span>
+              <input 
+                type="range" 
+                id="score"
+                min="1" 
+                max="10" 
+                bind:value={currentScore}
+                class="flex-1 h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <span class="text-sm text-gray-500 font-medium text-center">10<br><span class="text-xs">Excellent</span></span>
+            </div>
+            <div class="text-center">
+              <div class="inline-block bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-bold text-xl">
+                {currentScore}
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex space-x-4">
+            <button
+              on:click={refreshProgress}
+              disabled={submitting}
+              class="px-6 py-2 text-gray-600 bg-gray-200 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              🔄 Refresh
+            </button>
+            <button
+              on:click={submitEvaluation}
+              disabled={submitting}
+              class="flex-1 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {#if submitting}
+                <span class="flex items-center justify-center">
+                  <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting...
+                </span>
+              {:else}
+                Submit & Next →
+              {/if}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+</div>
+
+<style>
+  input[type="range"] {
+    background: linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #10b981 100%);
+  }
+  
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #3b82f6;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  
+  input[type="range"]::-moz-range-thumb {
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #3b82f6;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+</style>
