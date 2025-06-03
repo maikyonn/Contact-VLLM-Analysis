@@ -168,10 +168,10 @@
   <title>Semantic Evaluation Tool</title>
 </svelte:head>
 
-<div class="container mx-auto px-4 py-8">
-  <header class="text-center mb-8">
-    <h1 class="text-3xl font-bold text-gray-900 mb-4">Semantic Description Evaluation</h1>
-    <p class="text-gray-600 max-w-2xl mx-auto">
+<div class="container mx-auto px-4 py-4">
+  <header class="text-center mb-4">
+    <h1 class="text-2xl font-bold text-gray-900 mb-2">Semantic Description Evaluation</h1>
+    <p class="text-gray-600 max-w-2xl mx-auto text-sm">
       For each interaction listed, click ✓ if it's accurately described in the image, or ✗ if not.
       Then use the slider to indicate any interactions visible in the image but not described.
     </p>
@@ -197,7 +197,7 @@
     </div>
   {:else if currentPair}
     <!-- Progress Bar -->
-    <div class="max-w-4xl mx-auto mb-8">
+    <div class="max-w-4xl mx-auto mb-4">
       <div class="flex justify-between text-sm text-gray-600 mb-2">
         <span>Global Progress: {globalProgress.completed} of {globalProgress.total} evaluations</span>
         <span>{Math.round(progress)}% Complete</span>
@@ -211,9 +211,9 @@
     </div>
 
     <div class="max-w-6xl mx-auto">
-      <div class="grid lg:grid-cols-2 gap-8">
+      <div class="grid lg:grid-cols-2 gap-4">
         <!-- Image Section (Left) -->
-        <div class="bg-white rounded-lg shadow-md p-9">
+        <div class="bg-white rounded-lg shadow-md p-4">
           <div class="text-center">
             <img 
               src={currentPair.imageUrl} 
@@ -225,33 +225,33 @@
         </div>
 
         <!-- Evaluation Section (Right) -->
-        <div class="bg-white rounded-lg shadow-md p-9 flex flex-col">
+        <div class="bg-white rounded-lg shadow-md p-4 flex flex-col">
           <!-- Description Section -->
-          <div class="mb-8 flex-1">
-            <h3 class="text-xl font-semibold text-gray-800 mb-6">Description of Human Interactions:</h3>
-            <div class="bg-gray-50 p-6 rounded-lg">
+          <div class="mb-4 flex-1">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">Description of Human Interactions:</h3>
+            <div class="bg-gray-50 p-3 rounded-lg">
               {#if currentPair.modelContacts && currentPair.modelContacts.length > 0}
-                <ul class="space-y-4 text-gray-700 text-base">
+                <ul class="grid grid-cols-1 {currentPair.modelContacts.length > 6 ? 'lg:grid-cols-2' : ''} gap-2 text-gray-700 text-sm">
                   {#each currentPair.modelContacts as contact, index}
-                    <li class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 transition-colors">
+                    <li class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 transition-colors bg-white border border-gray-200">
                       <button
                         on:click={() => toggleContactState(index, 'x')}
-                        class="p-2 rounded-lg transition-all {contactStates[index] === 'x' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-red-100'}"
+                        class="p-1.5 rounded transition-all flex-shrink-0 {contactStates[index] === 'x' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-red-100'}"
                         title="Mark as incorrect"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
                       
-                      <span class="flex-1 mx-4 leading-relaxed text-center">{contact}</span>
+                      <span class="flex-1 mx-2 leading-snug text-left">{contact}</span>
                       
                       <button
                         on:click={() => toggleContactState(index, 'check')}
-                        class="p-2 rounded-lg transition-all {contactStates[index] === 'check' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-green-100'}"
+                        class="p-1.5 rounded transition-all flex-shrink-0 {contactStates[index] === 'check' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-green-100'}"
                         title="Mark as correct"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       </button>
@@ -265,24 +265,24 @@
           </div>
 
           <!-- Missed Interactions Slider -->
-          <div class="mb-8">
-            <label for="missed" class="block text-lg font-medium text-gray-700 mb-4">
+          <div class="mb-4">
+            <label for="missed" class="block text-base font-medium text-gray-700 mb-2">
               How many interactions were missed in the description?
             </label>
-            <div class="flex items-center space-x-4 mb-4">
-              <span class="text-sm text-gray-500 font-medium">0</span>
+            <div class="flex items-center space-x-3 mb-2">
+              <span class="text-sm text-gray-500">0</span>
               <input 
                 type="range" 
                 id="missed"
                 min="0" 
                 max="10" 
                 bind:value={missedInteractions}
-                class="flex-1 h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
-              <span class="text-sm text-gray-500 font-medium">10</span>
+              <span class="text-sm text-gray-500">10</span>
             </div>
             <div class="text-center">
-              <div class="inline-block bg-orange-100 text-orange-800 px-4 py-2 rounded-lg font-bold text-xl">
+              <div class="inline-block bg-orange-100 text-orange-800 px-3 py-1 rounded-lg font-bold text-lg">
                 {missedInteractions} missed
               </div>
             </div>
@@ -328,8 +328,8 @@
   
   input[type="range"]::-webkit-slider-thumb {
     appearance: none;
-    height: 20px;
-    width: 20px;
+    height: 16px;
+    width: 16px;
     border-radius: 50%;
     background: #ffffff;
     border: 2px solid #3b82f6;
@@ -338,8 +338,8 @@
   }
   
   input[type="range"]::-moz-range-thumb {
-    height: 20px;
-    width: 20px;
+    height: 16px;
+    width: 16px;
     border-radius: 50%;
     background: #ffffff;
     border: 2px solid #3b82f6;
