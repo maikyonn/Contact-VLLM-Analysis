@@ -6,7 +6,8 @@
   let allPairs: EvaluationPair[] = [];
   let unevaluatedPairs: EvaluationPair[] = [];
   let currentPair: EvaluationPair | null = null;
-  let currentScore = 5;
+  let contactStates: Record<number, 'check' | 'x' | null> = {};
+  let missedInteractions = 0;
   let userId = '';
   let loading = true;
   let submitting = false;
@@ -95,6 +96,10 @@
         return;
       }
       
+      // Calculate checks and X's
+      const checks = Object.values(contactStates).filter(state => state === 'check').length;
+      const xs = Object.values(contactStates).filter(state => state === 'x').length;
+      
       // Submit the evaluation
       const { error } = await supabase
         .from('evaluations')
@@ -102,7 +107,9 @@
           image_id: currentPair.imageId,
           model_name: currentPair.modelName,
           user_id: userId,
-          score: currentScore,
+          checks: checks,
+          xs: xs,
+          missed_interactions: missedInteractions,
           image_url: currentPair.imageUrl,
           original_contacts: currentPair.originalContacts,
           model_contacts: currentPair.modelContacts,
@@ -136,8 +143,17 @@
   }
 
   async function loadNextPair() {
-    currentScore = 5; // Reset to default score
+    contactStates = {}; // Reset contact states
+    missedInteractions = 0; // Reset missed interactions
     await getNextUnevaluatedPair();
+  }
+  
+  function toggleContactState(index: number, state: 'check' | 'x') {
+    if (contactStates[index] === state) {
+      contactStates[index] = null;
+    } else {
+      contactStates[index] = state;
+    }
   }
 
   async function refreshProgress() {
@@ -156,8 +172,8 @@
   <header class="text-center mb-8">
     <h1 class="text-3xl font-bold text-gray-900 mb-4">Semantic Description Evaluation</h1>
     <p class="text-gray-600 max-w-2xl mx-auto">
-      Rate how well each description captures the human interactions shown in the image. 
-      Rate from 1 (very poor) to 10 (excellent) based on accuracy and completeness.
+      For each interaction listed, click ✓ if it's accurately described in the image, or ✗ if not.
+      Then use the slider to indicate any interactions visible in the image but not described.
     </p>
   </header>
 
@@ -211,15 +227,34 @@
         <!-- Evaluation Section (Right) -->
         <div class="bg-white rounded-lg shadow-md p-9 flex flex-col">
           <!-- Description Section -->
-          <div class="mb-12 flex-1">
+          <div class="mb-8 flex-1">
             <h3 class="text-xl font-semibold text-gray-800 mb-6">Description of Human Interactions:</h3>
-            <div class="bg-gray-50 p-9 rounded-lg">
+            <div class="bg-gray-50 p-6 rounded-lg">
               {#if currentPair.modelContacts && currentPair.modelContacts.length > 0}
-                <ul class="space-y-3 text-gray-700 text-base">
-                  {#each currentPair.modelContacts as contact}
-                    <li class="flex items-start">
-                      <span class="text-blue-500 mr-4 mt-1 text-lg">•</span>
-                      <span class="leading-relaxed">{contact}</span>
+                <ul class="space-y-4 text-gray-700 text-base">
+                  {#each currentPair.modelContacts as contact, index}
+                    <li class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-100 transition-colors">
+                      <button
+                        on:click={() => toggleContactState(index, 'x')}
+                        class="p-2 rounded-lg transition-all {contactStates[index] === 'x' ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-red-100'}"
+                        title="Mark as incorrect"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                      
+                      <span class="flex-1 mx-4 leading-relaxed text-center">{contact}</span>
+                      
+                      <button
+                        on:click={() => toggleContactState(index, 'check')}
+                        class="p-2 rounded-lg transition-all {contactStates[index] === 'check' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600 hover:bg-green-100'}"
+                        title="Mark as correct"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      </button>
                     </li>
                   {/each}
                 </ul>
@@ -229,26 +264,26 @@
             </div>
           </div>
 
-          <!-- Rating Section -->
+          <!-- Missed Interactions Slider -->
           <div class="mb-8">
-            <label for="score" class="block text-lg font-medium text-gray-700 mb-4">
-              Rate the accuracy and completeness:
+            <label for="missed" class="block text-lg font-medium text-gray-700 mb-4">
+              How many interactions were missed in the description?
             </label>
             <div class="flex items-center space-x-4 mb-4">
-              <span class="text-sm text-gray-500 font-medium text-center">1<br><span class="text-xs">Very Poor</span></span>
+              <span class="text-sm text-gray-500 font-medium">0</span>
               <input 
                 type="range" 
-                id="score"
-                min="1" 
+                id="missed"
+                min="0" 
                 max="10" 
-                bind:value={currentScore}
+                bind:value={missedInteractions}
                 class="flex-1 h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
-              <span class="text-sm text-gray-500 font-medium text-center">10<br><span class="text-xs">Excellent</span></span>
+              <span class="text-sm text-gray-500 font-medium">10</span>
             </div>
             <div class="text-center">
-              <div class="inline-block bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-bold text-xl">
-                {currentScore}
+              <div class="inline-block bg-orange-100 text-orange-800 px-4 py-2 rounded-lg font-bold text-xl">
+                {missedInteractions} missed
               </div>
             </div>
           </div>
@@ -287,8 +322,8 @@
 </div>
 
 <style>
-  input[type="range"] {
-    background: linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #10b981 100%);
+  input[type="range"]#missed {
+    background: linear-gradient(to right, #10b981 0%, #f59e0b 50%, #ef4444 100%);
   }
   
   input[type="range"]::-webkit-slider-thumb {

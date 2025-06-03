@@ -10,7 +10,10 @@ export interface Database {
           image_id: string;
           model_name: string;
           user_id: string;
-          score: number;
+          score?: number;
+          checks?: number;
+          xs?: number;
+          missed_interactions?: number;
           created_at: string;
           image_url: string;
           original_contacts: string[];
@@ -22,7 +25,10 @@ export interface Database {
           image_id: string;
           model_name: string;
           user_id: string;
-          score: number;
+          score?: number;
+          checks?: number;
+          xs?: number;
+          missed_interactions?: number;
           created_at?: string;
           image_url: string;
           original_contacts: string[];
@@ -35,6 +41,9 @@ export interface Database {
           model_name?: string;
           user_id?: string;
           score?: number;
+          checks?: number;
+          xs?: number;
+          missed_interactions?: number;
           created_at?: string;
           image_url?: string;
           original_contacts?: string[];
