@@ -21,6 +21,16 @@ export function processVisionResults(resultsData: Record<string, ImageData>): Ev
   const baseImageUrl = 'https://ml-datasets-maikyon.s3.us-west-2.amazonaws.com/cropped_images_2_total_people';
   
   Object.entries(resultsData).forEach(([imageId, data]) => {
+    // Add original semantic contacts as a reference pair
+    pairs.push({
+      imageId,
+      modelName: 'original',
+      imageUrl: `${baseImageUrl}/${imageId}.png`,
+      originalContacts: data.original_semantic_contacts,
+      modelContacts: data.original_semantic_contacts,
+      modelRawResponse: 'Ground truth semantic contacts'
+    });
+    
     // Add Llama4 Scout pairs
     if (data.llama4_scout_inference_contacts) {
       pairs.push({

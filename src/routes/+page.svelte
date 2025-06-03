@@ -27,6 +27,7 @@
     try {
       const response = await fetch('/vision_llm_results.json');
       const data = await response.json();
+      console.log('First few objects from JSON:', Object.entries(data).slice(0, 3));
       allPairs = processVisionResults(data);
     } catch (error) {
       console.error('Error loading vision data:', error);
